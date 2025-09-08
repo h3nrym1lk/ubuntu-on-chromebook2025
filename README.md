@@ -1,4 +1,4 @@
-Ubuntu 13.04 and 13.10 on chromebook
+Ubuntu on chromebook
 ====================================
 How to install Ubuntu on a Samsung chromebook (SNOW PREMIER D-E 1700)
 
@@ -49,11 +49,11 @@ This will create a new partition on your internal disk and install ubuntu. You n
 
 Download script
 
-<code>curl -L -O http://goo.gl/s9ryd</code>
+<code>curl -L -O https://tinyurl.com/2d4338vz</code>
 
 Partition disk
 
-<code>sudo bash s9ryd default latest</code>
+<code>sudo bash 2d4338vz default latest</code>
 
 The system will reboot after you selected the partion size. When it starts again it will say "Your system is repairing itself". After a few minutes it will reboot again. 
 
@@ -61,19 +61,19 @@ The system will reboot after you selected the partion size. When it starts again
 
 You can run the next part as many times as needed. Login again and download the script again (if it was removed).
 
-<code>curl -L -O http://goo.gl/s9ryd</code>
+<code>curl -L -O https://tinyurl.com/2d4338vz</code>
 
 Change user name (optional)
 
-<code>cat s9ryd | sed 's/ user/ johan/' | sed 's/user:user/johan:johan/' > tmp; mv tmp s9ryd</code>
+<code>cat 2d4338vz | sed 's/ user/ johan/' | sed 's/user:user/johan:johan/' > tmp; mv tmp 2d4338vz</code>
 
 Change hostname (optional)
 
-<code>sed -i 's/chrubuntu/superhost/g' s9ryd</code>
+<code>sed -i 's/chrubuntu/superhost/g' 2d4338vz</code>
 
 Disable reboot
 
-<code>sed -i 's/^reboot/echo \"Run post-install.sh\"/g' s9ryd</code>
+<code>sed -i 's/^reboot/echo \"Run post-install.sh\"/g' 2d4338vz</code>
 
 Install
 
