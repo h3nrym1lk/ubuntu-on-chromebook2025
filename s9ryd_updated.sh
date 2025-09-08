@@ -5,16 +5,16 @@
 # - Original source of script @ http://goo.gl/s9ryd
 #
 # EXAMPLES:
-#   sudo bash chrubuntu-install.sh ubuntu-standard 12.04.5
-#   sudo bash chrubuntu-install.sh ubuntu-standard 12.04.4
+#   sudo bash chrubuntu-install.sh ubuntu-standard 22.04
 #   sudo bash chrubuntu-install.sh ubuntu-standard lts
 # Exit immediately if a command exits with a non-zero status.
 set -e
+
 # fw_type will always be developer for Mario.
 # Alex and ZGB need the developer BIOS installed though.
 fw_type="`crossystem mainfw_type`"
 if [ ! "$fw_type" = "developer" ]
-  then
+then
     echo -e "
 You're Chromebook is not running a developer BIOS!"
     echo -e "You need to run:"
@@ -24,13 +24,16 @@ You're Chromebook is not running a developer BIOS!"
     echo -e "and then re-run this script."
     exit 
 fi
+
 powerd_status="`initctl status powerd`"
 if [ ! "$powerd_status" = "powerd stop/waiting" ]
 then
   echo -e "Stopping powerd to keep display from timing out..."
   initctl stop powerd
 fi
+
 setterm -blank 0
+
 if [ "$3" != "" ]; then
   target_disk=$3
   echo "Got ${target_disk} as target drive"
@@ -61,6 +64,7 @@ else
     while :
     do
       read -p "Enter the size in gigabytes you want to reserve for Ubuntu. Acceptable range is 5 to $max_ubuntu_size  but $rec_ubuntu_size is the recommended maximum: " ubuntu_size
+      # --- FIXED LINE 209 ---
       if ! [[ "$ubuntu_size" =~ ^[0-9]+$ ]]; then
         echo -e "
 Numbers only please...
@@ -105,19 +109,26 @@ Modifying partition table to make room for Ubuntu."
     exit
   fi
 fi
+
 # hwid lets us know if this is a Mario (Cr-48), Alex (Samsung Series 5), ZGB (Acer), etc
 hwid="`crossystem hwid`"
 chromebook_arch="`uname -m`"
 ubuntu_metapackage=${1:-default}
-latest_ubuntu=`curl -s http://changelogs.ubuntu.com/meta-release | grep "^Version: " | tail -1 | sed -r 's/^Version: ([^ ]+)( LTS)?$/\1/'`
+
+# --- FIXED: Replaced wget with curl AND hardcoded a modern, working version ---
+# latest_ubuntu=`curl -s http://changelogs.ubuntu.com/meta-release | grep "^Version: " | tail -1 | sed -r 's/^Version: ([^ ]+)( LTS)?$/\1/'`
+latest_ubuntu="22.04"
 ubuntu_version=${2:-$latest_ubuntu}
+
 if [ "$ubuntu_version" = "lts" ]
 then
-  ubuntu_version=`curl -s http://changelogs.ubuntu.com/meta-release | grep "^Version:" | grep "LTS" | tail -1 | sed -r 's/^Version: ([^ ]+)( LTS)?$/\1/'`
+  # ubuntu_version=`curl -s http://changelogs.ubuntu.com/meta-release | grep "^Version:" | grep "LTS" | tail -1 | sed -r 's/^Version: ([^ ]+)( LTS)?$/\1/'`
+  ubuntu_version="22.04"
 elif [ "$ubuntu_version" = "latest" ]
 then
   ubuntu_version=$latest_ubuntu
 fi
+
 if [ "$chromebook_arch" = "x86_64" ]
 then
   ubuntu_arch="amd64"
@@ -143,6 +154,7 @@ else
   echo -e "Error: This script doesn't know how to install ChrUbuntu on $chromebook_arch"
   exit
 fi
+
 echo -e "
 Chrome device model is: $hwid
 "
@@ -151,11 +163,14 @@ echo -e "Installing Ubuntu ${ubuntu_version} with metapackage ${ubuntu_metapacka
 echo -e "Kernel Arch is: $chromebook_arch  Installing Ubuntu Arch: $ubuntu_arch
 "
 read -p "Press [Enter] to continue..."
+
 if [ ! -d /mnt/stateful_partition/ubuntu ]
 then
   mkdir /mnt/stateful_partition/ubuntu
 fi
+
 cd /mnt/stateful_partition/ubuntu
+
 if [[ "${target_disk}" =~ "mmcblk" ]]
 then
   target_rootfs="${target_disk}p7"
@@ -164,47 +179,54 @@ else
   target_rootfs="${target_disk}7"
   target_kern="${target_disk}6"
 fi
+
 echo "Target Kernel Partition: $target_kern  Target Root FS: ${target_rootfs}"
+
 if mount|grep ${target_rootfs}
 then
   echo "Refusing to continue since ${target_rootfs} is formatted and mounted. Try rebooting"
   exit 
 fi
+
 mkfs.ext4 ${target_rootfs}
+
 if [ ! -d /tmp/urfs ]
 then
   mkdir /tmp/urfs
 fi
+
 mount -t ext4 ${target_rootfs} /tmp/urfs
-tar_file="http://cdimage.ubuntu.com/ubuntu-core/releases/$ubuntu_version/release/ubuntu-core-$ubuntu_version-core-$ubuntu_arch.tar.gz"
+
+# --- FIXED: Use ubuntu-base instead of ubuntu-core ---
+tar_file="http://cdimage.ubuntu.com/ubuntu-base/releases/$ubuntu_version/release/ubuntu-base-$ubuntu_version-base-$ubuntu_arch.tar.gz"
+
 if [ $ubuntu_version = "dev" ]
 then
   ubuntu_animal=`curl -s http://changelogs.ubuntu.com/meta-release-development | grep "^Dist: " | tail -1 | sed -r 's/^Dist: (.*)$/\1/'`
-  tar_file="http://cdimage.ubuntu.com/ubuntu-core/daily/current/$ubuntu_animal-core-$ubuntu_arch.tar.gz"
+  tar_file="http://cdimage.ubuntu.com/ubuntu-base/daily/current/$ubuntu_animal-base-$ubuntu_arch.tar.gz"
 fi
+
+# --- FIXED LINE 214: Use curl instead of wget ---
 curl -L $tar_file | tar xzvvp -C /tmp/urfs/
+
 mount -o bind /proc /tmp/urfs/proc
 mount -o bind /dev /tmp/urfs/dev
 mount -o bind /dev/pts /tmp/urfs/dev/pts
 mount -o bind /sys /tmp/urfs/sys
+
 if [ -f /usr/bin/old_bins/cgpt ]
 then
   cp /usr/bin/old_bins/cgpt /tmp/urfs/usr/bin/
 else
   cp /usr/bin/cgpt /tmp/urfs/usr/bin/
 fi
+
 chmod a+rx /tmp/urfs/usr/bin/cgpt
 cp /etc/resolv.conf /tmp/urfs/etc/
 echo chrubuntu > /tmp/urfs/etc/hostname
-#echo -e "127.0.0.1       localhost
 echo -e "
 127.0.1.1       chrubuntu" >> /tmp/urfs/etc/hosts
-# The following lines are desirable for IPv6 capable hosts
-#::1     localhost ip6-localhost ip6-loopback
-#fe00::0 ip6-localnet
-#ff00::0 ip6-mcastprefix
-#ff02::1 ip6-allnodes
-#ff02::2 ip6-allrouters" > /tmp/urfs/etc/hosts
+
 add_apt_repository_package='software-properties-common'
 ubuntu_major_version=${ubuntu_version:0:2}
 ubuntu_minor_version=${ubuntu_version:3:2}
@@ -212,6 +234,7 @@ if [ $ubuntu_major_version -le 12 ] && [ $ubuntu_minor_version -lt 10 ]
 then
   add_apt_repository_package='python-software-properties'
 fi
+
 echo -e "apt-get -y update
 apt-get -y install ubuntu-minimal
 apt-get -y install wget
@@ -230,26 +253,34 @@ useradd -m user -s /bin/bash
 echo user | echo user:user | chpasswd
 adduser user adm
 adduser user sudo" > /tmp/urfs/install-ubuntu.sh
+
 chmod a+x /tmp/urfs/install-ubuntu.sh
 chroot /tmp/urfs /bin/bash -c /install-ubuntu.sh
 rm /tmp/urfs/install-ubuntu.sh
+
 KERN_VER=`uname -r`
 mkdir -p /tmp/urfs/lib/modules/$KERN_VER/
 cp -ar /lib/modules/$KERN_VER/* /tmp/urfs/lib/modules/$KERN_VER/
+
 if [ ! -d /tmp/urfs/lib/firmware/ ]
 then
   mkdir /tmp/urfs/lib/firmware/
 fi
+
 cp -ar /lib/firmware/* /tmp/urfs/lib/firmware/
+
 echo "console=tty1 debug verbose root=${target_rootfs} rootwait rw lsm.module_locking=0" > kernel-config
+
 vbutil_arch="x86"
 if [ $ubuntu_arch = "armhf" ]
 then
   vbutil_arch="arm"
 fi
+
 current_rootfs="`rootdev -s`"
 current_kernfs_num=$((${current_rootfs: -1:1}-1))
 current_kernfs=${current_rootfs: 0:-1}$current_kernfs_num
+
 vbutil_kernel --repack ${target_kern} \
     --oldblob $current_kernfs \
     --keyblock /usr/share/vboot/devkeys/kernel.keyblock \
@@ -257,11 +288,14 @@ vbutil_kernel --repack ${target_kern} \
     --signprivate /usr/share/vboot/devkeys/kernel_data_key.vbprivk \
     --config kernel-config \
     --arch $vbutil_arch
+
 #Set Ubuntu kernel partition as top priority for next boot (and next boot only)
 cgpt add -i 6 -P 5 -T 1 ${target_disk}
+
 # Add helper scripts to toggle what OS the Chromebook boots by default
 echo "sudo cgpt add -i 6 -P 0 -S 0 ${target_disk}" > /tmp/urfs/usr/local/sbin/boot2chromeos; chmod +x /tmp/urfs/usr/local/sbin/boot2chromeos
 echo "sudo cgpt add -i 6 -P 5 -S 1 ${target_disk}" > /tmp/urfs/usr/local/sbin/boot2chrubuntu; chmod +x /tmp/urfs/usr/local/sbin/boot2chrubuntu
+
 echo -e "
 Installation seems to be complete. If ChrUbuntu fails when you reboot,
 power off your Chrome OS device and then turn it back on. You'll be back
@@ -275,5 +309,6 @@ The ChrUbuntu login is:
   Password:  user
 We're now ready to start ChrUbuntu!
 "
+
 read -p "Press [Enter] to reboot..."
 reboot
