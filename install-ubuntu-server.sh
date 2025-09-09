@@ -46,9 +46,20 @@ if [ "$1" != "" ]; then
   cgpt add -i 6 -b 64 -s 32768 -S 1 -P 5 -l KERN-A -t "kernel" ${target_disk} # KERN-A
   cgpt add -i 7 -b 65600 -s $aroot_size -l ROOT-A -t "rootfs" ${target_disk} # ROOT-A
   sync
-  blockdev --rereadpt ${target_disk}
-  # Try partx, might fail silently if not needed or not available
-  partx -a ${target_disk} 2>/dev/null || true
+  # --- FIX: Add retry for blockdev --rereadpt ---
+  echo "Re-reading partition table..."
+  for i in {1..5}; do
+      if blockdev --rereadpt ${target_disk}; then
+          echo "Partition table re-read successfully (attempt $i)."
+          break
+      else
+          echo "blockdev --rereadpt failed (attempt $i). Retrying in 1 second..."
+          sleep 1
+      fi
+  done
+  # partx might also fail if the device is busy, ignore errors for now
+  partx -a ${target_disk} 2>/dev/null || echo "Warning: partx failed, might need manual intervention."
+  # --- End Fix ---
   crossystem dev_boot_usb=1
   # No reboot needed for fresh disk, proceed
 else
@@ -96,15 +107,46 @@ That number is out of range. Enter a number 5 through $max_ubuntu_size
 Modifying partition table to make room for Ubuntu Server."
     echo -e "Your Chromebook will reboot, wipe the ROOT-C/KERN-C partitions, and then"
     echo -e "you should re-run this script..."
-    # Ensure stateful is unmounted
-    umount /mnt/stateful_partition 2>/dev/null || true
-
-    # Repartition
+    # --- FIX: Ensure stateful is unmounted before repartitioning ---
+    echo "Attempting to unmount /mnt/stateful_partition..."
+    # Loop a few times to ensure it's unmounted, as processes might quickly remount it
+    for i in {1..5}; do
+        if umount /mnt/stateful_partition 2>/dev/null; then
+            echo "Successfully unmounted /mnt/stateful_partition (attempt $i)."
+            break
+        else
+            echo "Unmount attempt $i failed or already unmounted. Retrying in 1 second..."
+            sleep 1
+        fi
+    done
+    # Final check
+    if mount | grep -q '/mnt/stateful_partition'; then
+        echo "Error: Failed to unmount /mnt/stateful_partition. Cannot proceed safely."
+        echo "Please ensure no processes are using it and try again."
+        exit 1
+    else
+        echo "/mnt/stateful_partition is confirmed unmounted."
+    fi
+    # --- End Fix ---
+    # stateful first
     cgpt add -i 1 -b $stateful_start -s $stateful_size -l STATE ${target_disk} # Resize STATE
+    # now kernc
     cgpt add -i 6 -b $kernc_start -s $kernc_size -l KERN-C ${target_disk}    # KERN-C
+    # finally rootc
     cgpt add -i 7 -b $rootc_start -s $rootc_size -l ROOT-C ${target_disk}    # ROOT-C
     sync
-    blockdev --rereadpt ${target_disk}
+    # --- FIX: Add retry for blockdev --rereadpt after modification ---
+    echo "Re-reading partition table after modification..."
+    for i in {1..5}; do
+        if blockdev --rereadpt ${target_disk}; then
+            echo "Partition table re-read successfully (attempt $i)."
+            break
+        else
+            echo "blockdev --rereadpt failed (attempt $i). Retrying in 1 second..."
+            sleep 1
+        fi
+    done
+    # --- End Fix ---
     reboot
     exit 0 # Exit after reboot trigger
   fi
